@@ -1,0 +1,18 @@
+# dữ liệu thật — KHÔNG đẩy lên git
+workspace/*
+!workspace/.gitkeep
+*.xls
+*.xlsx
+*.xlsm
+~$*
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# hệ thống
+Thumbs.db
+desktop.ini
+.DS_Store

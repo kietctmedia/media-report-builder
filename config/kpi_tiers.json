@@ -1,0 +1,10 @@
+{
+  "_comment": "Bậc KPI theo Điểm đánh giá cuối (= trung bình Điểm thời gian và Điểm chất lượng). Xếp từ cao xuống thấp, app lấy bậc đầu tiên thoả min.",
+  "gio_mot_ngay_cong": 8,
+  "bac": [
+    { "min": 8.9, "ten": "MỨC 3", "tien": 3000000 },
+    { "min": 8.4, "ten": "MỨC 2", "tien": 2500000 },
+    { "min": 8.0, "ten": "MỨC 1", "tien": 2000000 },
+    { "min": 0,   "ten": "Không đạt KPI", "tien": 0 }
+  ]
+}

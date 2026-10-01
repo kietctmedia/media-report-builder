@@ -1,0 +1,23 @@
+{
+  "_comment": "Ngày nghỉ lễ dùng để gợi ý Công chuẩn. Tự sửa thoải mái — app chỉ GỢI Ý, bạn vẫn chốt số cuối trên giao diện. Ngày rơi vào T7/CN sẽ tự bị bỏ qua.",
+  "2026": [
+    { "date": "2026-01-01", "name": "Tết Dương lịch" },
+    { "date": "2026-02-16", "name": "Tết Nguyên đán (nghỉ bù)" },
+    { "date": "2026-02-17", "name": "Mùng 1 Tết" },
+    { "date": "2026-02-18", "name": "Mùng 2 Tết" },
+    { "date": "2026-02-19", "name": "Mùng 3 Tết" },
+    { "date": "2026-02-20", "name": "Mùng 4 Tết" },
+    { "date": "2026-04-27", "name": "Giỗ tổ Hùng Vương (nghỉ bù)" },
+    { "date": "2026-04-30", "name": "Giải phóng miền Nam" },
+    { "date": "2026-05-01", "name": "Quốc tế Lao động" },
+    { "date": "2026-09-02", "name": "Quốc khánh" },
+    { "date": "2026-09-03", "name": "Quốc khánh (ngày thứ 2)" }
+  ],
+  "2027": [
+    { "date": "2027-01-01", "name": "Tết Dương lịch" },
+    { "date": "2027-04-30", "name": "Giải phóng miền Nam" },
+    { "date": "2027-05-03", "name": "Quốc tế Lao động (nghỉ bù)" },
+    { "date": "2027-09-02", "name": "Quốc khánh" },
+    { "date": "2027-09-03", "name": "Quốc khánh (ngày thứ 2)" }
+  ]
+}
