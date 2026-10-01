@@ -78,7 +78,40 @@ Khi biết shape thật, chỉ sửa `ENDPOINTS` + `FIELD_MAP` + `CUSTOM_FIELD_M
 `app/sources/base_api.py`; phần còn lại của app dùng chung một shape dữ liệu với
 đường đọc file nên không phải sửa gì thêm.
 
-## Vì sao phải chạy local
+## Bản online (chế độ cloud)
+
+Cùng một bộ code, bật bằng biến môi trường `MRB_MODE=cloud`. Khác bản máy:
+
+| | Bản máy (`start.bat`) | Bản online |
+|---|---|---|
+| Lấy file | Quét thẳng thư mục trên ổ E: | Tải file lên |
+| Tính lại công thức | Có Excel → tính sẵn, tự kiểm tra | Không có Excel → số hiện khi mở file |
+| Nhận file | Mở thẳng tại chỗ | Bấm nút tải về |
+| Phạm vi đọc/ghi | Toàn máy | Chỉ trong `workspace/<phiên>`, tự xoá sau 6 giờ |
+
+File xuất ra của hai bản **giống hệt nhau** — chỉ khác là bản online không nhúng
+sẵn giá trị đã tính, nhưng Excel tự tính ngay lúc mở nên kết quả không đổi.
+
+### Deploy lên Render (free)
+
+Repo đã có sẵn `render.yaml`. Vào [dashboard.render.com](https://dashboard.render.com)
+→ **New** → **Blueprint** → chọn repo này → Apply. Render đọc file đó và tự đặt
+`MRB_MODE=cloud`. Khoảng 2 phút là có link `https://<tên>.onrender.com`.
+
+Gói free ngủ sau 15 phút không ai dùng, lần vào đầu tiên chờ ~30 giây. Nếu nó ngủ
+giữa chừng thì file đã tải lên có thể mất, app sẽ báo tải lại.
+
+Host khác (Railway, Fly.io, Heroku) dùng `Procfile` có sẵn, nhớ đặt biến
+`MRB_MODE=cloud`.
+
+### Lưu ý về dữ liệu
+
+Bản online nhận file chứa tên nhân viên, giờ làm và điểm KPI. File nằm trên máy
+chủ của bên thứ ba vài giờ rồi tự xoá, và **app không có đăng nhập** — ai có link
+cũng vào được. Nếu cần kín, hãy đặt mật khẩu ở tầng host (Render có Basic Auth)
+hoặc chỉ dùng bản chạy trên máy.
+
+## Vì sao bản đầy đủ phải chạy local
 
 Hai ràng buộc bắt buộc: app phải đọc file trên ổ `E:`, và phải nhờ **Excel** tính
 lại array formula (`INDEX/SMALL/IF`) trong 2 sheet Rút gọn — openpyxl chỉ ghi được

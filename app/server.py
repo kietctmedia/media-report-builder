@@ -7,16 +7,19 @@ array formula.
 """
 from __future__ import annotations
 
-import io
 import json
 import mimetypes
 import os
 import re
+import secrets
+import shutil
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import webbrowser
+from urllib.parse import quote
 from email.parser import BytesParser
 from email.policy import default as email_default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -35,11 +38,46 @@ from app.core import builder, calendar_vn as cal, pipeline, rules, template  # n
 from app.sources import base_api, excel_export  # noqa: E402
 
 WEB_DIR = os.path.join(ROOT, 'app', 'web')
-WORKSPACE = os.path.join(ROOT, 'workspace')
+WORKSPACE = os.environ.get('MRB_WORKSPACE') or os.path.join(ROOT, 'workspace')
 os.makedirs(WORKSPACE, exist_ok=True)
+
+# Chế độ CLOUD: chạy trên host online, không có ổ E: và không có Excel.
+#   - chỉ làm việc với file người dùng tải lên, nằm trong workspace/<sid>/
+#   - cấm duyệt / đọc / ghi bất cứ đường dẫn nào ngoài workspace
+#   - xuất file xong thì cho tải về thay vì mở bằng Explorer
+CLOUD = os.environ.get('MRB_MODE', '').lower() == 'cloud'
 
 STATE: dict = {'tasks': [], 'stats': {}, 'template': None, 'folder': None}
 LOCK = threading.Lock()
+
+
+def safe_path(path: str) -> str:
+    """Ở chế độ cloud, mọi đường dẫn phải nằm trong workspace — chặn path traversal."""
+    p = os.path.abspath((path or '').strip().strip('"'))
+    if CLOUD and not p.startswith(os.path.abspath(WORKSPACE) + os.sep):
+        raise PermissionError('Đường dẫn nằm ngoài vùng làm việc cho phép.')
+    return p
+
+
+def new_session_dir() -> str:
+    sid = secrets.token_hex(8)
+    d = os.path.join(WORKSPACE, sid)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def sweep_workspace(max_age_h=6):
+    """Dọn thư mục phiên cũ (chỉ chạy ở chế độ cloud)."""
+    if not CLOUD:
+        return
+    now = time.time()
+    for name in os.listdir(WORKSPACE):
+        d = os.path.join(WORKSPACE, name)
+        try:
+            if os.path.isdir(d) and now - os.path.getmtime(d) > max_age_h * 3600:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
 
 SLIM = ('id', 'tag', 'name', 'person', 'T', 'quality', 'created', 'done', 'bu',
         'L', 'M', 'N', 'sL', 'sM', 'sN', 'include', 'carryover', 'note')
@@ -74,6 +112,8 @@ def apply_edits(tasks, edits):
 # ------------------------------------------------------------------ handlers
 
 def api_scan(body):
+    if CLOUD:
+        return {'ok': False, 'error': 'Bản online không quét ổ đĩa — hãy tải file lên.'}
     folder = (body.get('folder') or '').strip().strip('"')
     if not folder or not os.path.isdir(folder):
         return {'ok': False, 'error': f'Không thấy thư mục: {folder or "(trống)"}'}
@@ -89,7 +129,7 @@ def api_calendar(body):
 
 
 def api_template(body):
-    path = (body.get('path') or '').strip().strip('"')
+    path = safe_path(body.get('path') or '')
     if not os.path.isfile(path):
         return {'ok': False, 'error': f'Không thấy file: {path}'}
     try:
@@ -102,8 +142,8 @@ def api_template(body):
 
 
 def api_analyse(body):
-    files = body.get('exports') or []
-    tpl = (body.get('template') or '').strip().strip('"')
+    files = [{**f, 'path': safe_path(f['path'])} for f in (body.get('exports') or [])]
+    tpl = safe_path(body.get('template') or '') if body.get('template') else ''
     year, month = int(body['year']), int(body['month'])
     persons = body.get('persons') or []
     lookback = int(body.get('lookback', 1))
@@ -156,15 +196,26 @@ def api_score(body):
 def api_build(body):
     with LOCK:
         tasks = apply_edits(STATE['tasks'], body.get('edits') or {})
-        tpl = (body.get('template') or STATE.get('template') or '').strip().strip('"')
+        tpl = body.get('template') or STATE.get('template') or ''
+    tpl = safe_path(tpl) if tpl else ''
     if not tpl or not os.path.isfile(tpl):
-        return {'ok': False, 'error': 'Chưa chọn file báo cáo mẫu của tháng trước.'}
-    out_path = (body.get('out_path') or '').strip().strip('"')
-    if not out_path:
-        return {'ok': False, 'error': 'Chưa đặt đường dẫn file xuất.'}
+        return {'ok': False, 'error': 'Chưa chọn file báo cáo mẫu của tháng trước.'
+                if not CLOUD else
+                'Không còn thấy file mẫu — phiên làm việc đã hết, tải lại file giúp mình.'}
+
+    if CLOUD:
+        name = re.sub(r'[\\/:*?"<>|]', '_', os.path.basename(
+            body.get('out_path') or 'bao-cao.xlsx')) or 'bao-cao.xlsx'
+        if not name.lower().endswith('.xlsx'):
+            name += '.xlsx'
+        out_path = os.path.join(os.path.dirname(tpl), name)
+    else:
+        out_path = (body.get('out_path') or '').strip().strip('"')
+        if not out_path:
+            return {'ok': False, 'error': 'Chưa đặt đường dẫn file xuất.'}
     if os.path.abspath(out_path) == os.path.abspath(tpl):
         return {'ok': False, 'error': 'File xuất trùng với file mẫu — đổi tên để khỏi ghi đè.'}
-    if os.path.exists(out_path) and not body.get('overwrite'):
+    if os.path.exists(out_path) and not body.get('overwrite') and not CLOUD:
         return {'ok': False, 'error': 'exists', 'exists': True, 'path': out_path}
 
     cfgs = body.get('persons_cfg') or {}
@@ -199,12 +250,19 @@ def api_build(body):
                     'ok': abs(got['time_score'] - want) < 0.02,
                     'detail': f"Excel {got['time_score']} vs app {want}"})
 
-    return {'ok': True, 'out_path': os.path.abspath(out_path), 'layout_warnings': layout['warnings'],
-            'per_person': layout['per_person'], 'recalc': recalc, 'checks': checks,
-            'preview': preview, 'bu': pipeline.bu_summary(tasks)}
+    out = {'ok': True, 'out_path': os.path.abspath(out_path), 'layout_warnings': layout['warnings'],
+           'per_person': layout['per_person'], 'recalc': recalc, 'checks': checks,
+           'preview': preview, 'bu': pipeline.bu_summary(tasks)}
+    if CLOUD:
+        rel = os.path.relpath(out_path, WORKSPACE).replace('\\', '/')
+        out['download'] = '/api/download?f=' + quote(rel)
+        out['out_path'] = os.path.basename(out_path)
+    return out
 
 
 def api_open(body):
+    if CLOUD:
+        return {'ok': False, 'error': 'Bản online không mở được file trên máy bạn — bấm Tải file.'}
     path = (body.get('path') or '').strip().strip('"')
     if not os.path.exists(path):
         return {'ok': False, 'error': 'Không thấy đường dẫn.'}
@@ -232,10 +290,19 @@ def api_base_probe(body):
 
 
 def api_config(body):
-    return {'ok': True, 'rate_card': rules.load_rate_card(),
+    return {'ok': True, 'cloud': CLOUD, 'excel': _has_excel(),
+            'rate_card': rules.load_rate_card(),
             'tiers': pipeline.load_tiers(),
             'bu_order': rules.BU_ORDER,
             'config_dir': os.path.join(ROOT, 'config')}
+
+
+def _has_excel() -> bool:
+    try:
+        import win32com.client  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 ROUTES = {
@@ -280,8 +347,32 @@ class Handler(BaseHTTPRequestHandler):
                                     'stats': STATE['stats'], 'folder': STATE['folder'],
                                     'template': STATE['template']})
         if path == '/api/browse':
+            if CLOUD:
+                return self._send(403, {'ok': False, 'error': 'Bản online không duyệt ổ đĩa.'})
             return self._send(200, self._browse(parse_qs(parsed.query)))
+        if path == '/api/download':
+            return self._download(parse_qs(parsed.query))
         return self._send(404, {'ok': False, 'error': 'not found'})
+
+    def _download(self, qs):
+        rel = (qs.get('f') or [''])[0]
+        try:
+            full = safe_path(os.path.join(WORKSPACE, rel))
+        except PermissionError as exc:
+            return self._send(403, {'ok': False, 'error': str(exc)})
+        if not os.path.isfile(full) or not full.lower().endswith('.xlsx'):
+            return self._send(404, {'ok': False, 'error': 'Không thấy file.'})
+        with open(full, 'rb') as fh:
+            data = fh.read()
+        name = os.path.basename(full)
+        self.send_response(200)
+        self.send_header('Content-Type',
+                         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.send_header('Content-Disposition',
+                         f"attachment; filename*=UTF-8''{quote(name)}")
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _browse(self, qs):
         start = (qs.get('path') or [''])[0]
@@ -340,34 +431,39 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length') or 0)
         raw = b'Content-Type: ' + ctype.encode() + b'\r\n\r\n' + self.rfile.read(length)
         msg = BytesParser(policy=email_default).parsebytes(raw)
+        sweep_workspace()
+        target = new_session_dir() if CLOUD else WORKSPACE
         saved = []
         for part in msg.iter_parts():
             name = part.get_filename()
             if not name:
                 continue
             name = re.sub(r'[\\/:*?"<>|]', '_', os.path.basename(name))
-            dest = os.path.join(WORKSPACE, name)
+            dest = os.path.join(target, name)
             with open(dest, 'wb') as fh:
                 fh.write(part.get_payload(decode=True) or b'')
             saved.append({'file': name, 'path': dest,
                           'tag': excel_export.tag_from_filename(dest),
                           'size': os.path.getsize(dest)})
-        STATE['folder'] = WORKSPACE
-        return {'ok': True, 'folder': WORKSPACE, 'saved': saved,
+        STATE['folder'] = target
+        return {'ok': True, 'folder': target, 'saved': saved,
                 'exports': [s for s in saved if s['tag']],
-                'reports': template.detect_reports(WORKSPACE)}
+                'reports': template.detect_reports(target)}
 
 
 def main():
-    port = int(os.environ.get('MRB_PORT', '8765'))
-    srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    # host online đặt cổng qua biến PORT
+    port = int(os.environ.get('PORT') or os.environ.get('MRB_PORT') or 8765)
+    host = '0.0.0.0' if CLOUD else '127.0.0.1'
+    srv = ThreadingHTTPServer((host, port), Handler)
     url = f'http://127.0.0.1:{port}/'
     print('=' * 64)
-    print('  Media Report Builder')
-    print(f'  Đang chạy tại: {url}')
-    print('  Đóng cửa sổ này (hoặc Ctrl+C) để tắt app.')
+    print('  Media Report Builder' + ('  [CHẾ ĐỘ ONLINE]' if CLOUD else ''))
+    print(f'  Đang chạy tại: {host}:{port}')
+    if not CLOUD:
+        print('  Đóng cửa sổ này (hoặc Ctrl+C) để tắt app.')
     print('=' * 64)
-    if os.environ.get('MRB_NO_BROWSER') != '1':
+    if not CLOUD and os.environ.get('MRB_NO_BROWSER') != '1':
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()

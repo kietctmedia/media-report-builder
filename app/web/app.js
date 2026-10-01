@@ -12,6 +12,7 @@ const S = {
   folder: '', exports: [], reports: [], template: '', templateInfo: null,
   persons: [], cfg: {}, tasks: [], edits: {}, active: '', sel: new Set(),
   stats: null, lastBuild: null, bu: null, buN: null,
+  cloud: false, excel: true,
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -237,8 +238,10 @@ $('#btnAnalyse').onclick = async () => {
 
 function suggestOut() {
   const m = +$('#month').value, y = +$('#year').value;
+  const name = `MEDIA_CMA_Báo cáo hiệu suất team T${m}_${y}.xlsx`;
+  if (S.cloud) return name;
   const dir = S.template ? S.template.replace(/[^\\/]+$/, '') : (S.folder + '\\');
-  return `${dir}MEDIA_CMA_Báo cáo hiệu suất team T${m}_${y}.xlsx`;
+  return dir + name;
 }
 
 function renderFunnel(r) {
@@ -444,12 +447,17 @@ function renderResult(r) {
   (r.layout_warnings || []).forEach(w => {
     html += `<div class="callout warn">${esc(w)}</div>`;
   });
-  html += `<div class="row" style="margin-top:16px">
-      <button class="btn" id="btnOpenFile">Mở file</button>
-      <button class="btn ghost" id="btnOpenDir">Mở thư mục chứa file</button></div>`;
+  html += S.cloud
+    ? `<div class="row" style="margin-top:16px">
+         <a class="btn primary" href="${r.download}" download>⤓ Tải file báo cáo</a></div>`
+    : `<div class="row" style="margin-top:16px">
+         <button class="btn" id="btnOpenFile">Mở file</button>
+         <button class="btn ghost" id="btnOpenDir">Mở thư mục chứa file</button></div>`;
   $('#resultBox').innerHTML = html;
-  $('#btnOpenFile').onclick = () => api('/api/open', { path: r.out_path });
-  $('#btnOpenDir').onclick = () => api('/api/open', { path: r.out_path, reveal: true });
+  if (!S.cloud) {
+    $('#btnOpenFile').onclick = () => api('/api/open', { path: r.out_path });
+    $('#btnOpenDir').onclick = () => api('/api/open', { path: r.out_path, reveal: true });
+  }
 }
 
 /* BU */
@@ -494,9 +502,34 @@ $('#btnProbe').onclick = async () => {
 };
 
 /* khởi động */
+function applyCloudMode() {
+  document.body.classList.add('cloud');
+  $('#btnScan').closest('.row').classList.add('hidden');     // ô đường dẫn + nút quét/duyệt
+  $('#drop').style.marginTop = '0';
+  $('.panel[data-panel="1"] .card .hint').innerHTML =
+    'Tải lên các file export <code>.xls</code> của Base.vn và <b>file báo cáo tháng trước</b> '
+    + '(<code>.xlsx</code>, dùng làm khuôn và để loại trùng). File chỉ nằm trên máy chủ '
+    + 'trong vài giờ rồi tự xoá.';
+  $('#outPath').placeholder = 'Tên file .xlsx sẽ tải về';
+  const note = document.createElement('div');
+  note.className = 'callout warn';
+  note.innerHTML = '<b>Bản online</b> — máy chủ không có Excel nên không tính sẵn được '
+    + 'array formula. File xuất ra vẫn đúng công thức, số sẽ hiện ngay khi bạn mở bằng Excel. '
+    + 'Muốn app tự tính và tự kiểm tra thì chạy bản trên máy (xem README).';
+  $('.panel[data-panel="4"] .card').appendChild(note);
+}
+
 (async () => {
   goStep(1);
-  const st = await (await fetch('/api/state')).json();
-  if (st.ok && st.folder) { $('#folder').value = st.folder; }
+  const cfg = await api('/api/config', {});
+  if (cfg.ok) {
+    S.cloud = !!cfg.cloud;
+    S.excel = !!cfg.excel;
+    if (S.cloud) applyCloudMode();
+  }
+  if (!S.cloud) {
+    const st = await (await fetch('/api/state')).json();
+    if (st.ok && st.folder) $('#folder').value = st.folder;
+  }
   refreshCalendar();
 })();

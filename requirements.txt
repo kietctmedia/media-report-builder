@@ -1,0 +1,5 @@
+openpyxl>=3.1
+xlrd==2.0.1
+requests>=2.31
+# pywin32 KHÔNG liệt kê ở đây: chỉ có trên Windows, và chỉ dùng cho bước nhờ Excel
+# tính lại array formula. Bản online không có Excel nên tự bỏ qua bước đó.
