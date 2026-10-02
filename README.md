@@ -1,7 +1,13 @@
 # Media Report Builder
 
-Web app chạy local, dựng file báo cáo hiệu suất team Media (CMA) từ export Base.vn —
-tự động hoá đúng quy trình đã làm tay từ T5 đến T9/2026.
+Dựng file báo cáo hiệu suất team Media (CMA) từ export Base.vn — tự động hoá đúng
+quy trình đã làm tay từ T5 đến T9/2026.
+
+**▶ Dùng ngay, không cài gì: https://kietctmedia.github.io/media-report-builder/**
+
+Bản online chạy **hoàn toàn trong trình duyệt** (Python qua Pyodide/WebAssembly) —
+không có máy chủ, **file của bạn không rời khỏi máy**. Bản chạy trên máy
+(`start.bat`) mạnh hơn: quét thẳng thư mục và nhờ Excel tính sẵn công thức.
 
 ## Chạy
 
@@ -78,9 +84,38 @@ Khi biết shape thật, chỉ sửa `ENDPOINTS` + `FIELD_MAP` + `CUSTOM_FIELD_M
 `app/sources/base_api.py`; phần còn lại của app dùng chung một shape dữ liệu với
 đường đọc file nên không phải sửa gì thêm.
 
-## Bản online (chế độ cloud)
+## Bản online tĩnh (GitHub Pages) — đang chạy
 
-Cùng một bộ code, bật bằng biến môi trường `MRB_MODE=cloud`. Khác bản máy:
+https://kietctmedia.github.io/media-report-builder/
+
+Không có máy chủ nào cả. Trình duyệt tải Pyodide (Python biên dịch sang
+WebAssembly), cài `openpyxl` + `xlrd`, rồi chạy **đúng những module trong
+`app/core` và `app/sources`** mà bản trên máy dùng. File bạn chọn chỉ nằm trong
+bộ nhớ của tab, không gửi đi đâu; đóng tab là mất.
+
+Đo trên máy thật, dữ liệu T9/2026 (5 file export, 4.655 dòng):
+
+| | |
+|---|---|
+| Tải Pyodide + cài thư viện | ~2 giây (lần đầu, sau đó trình duyệt cache) |
+| Đọc 5 file `.xls` + lọc + chấm điểm | ~1 giây |
+| Dựng file `.xlsx` | ~1 giây |
+
+Kết quả **trùng khít** bản chạy trên máy: 132 task, Kiệt 15,44 / Giang 12,94.
+
+Sinh lại bản tĩnh sau khi sửa code:
+
+```
+python build_pages.py
+```
+
+Script chỉ **copy** từ `app/`, không có bản sao logic nào — sửa `rules.py` một chỗ
+là cả hai bản cùng đổi.
+
+## Bản online có máy chủ (chế độ cloud)
+
+Dùng khi muốn host riêng thay vì GitHub Pages. Cùng một bộ code, bật bằng biến
+môi trường `MRB_MODE=cloud`. Khác bản máy:
 
 | | Bản máy (`start.bat`) | Bản online |
 |---|---|---|

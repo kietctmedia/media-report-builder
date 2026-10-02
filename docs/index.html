@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Report Builder</title>
+<meta name="description" content="Dựng báo cáo hiệu suất team Media từ file export Base.vn — chạy hoàn toàn trong trình duyệt.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">MR</span>
+    <div>
+      <h1>Media Report Builder</h1>
+      <p>Dựng báo cáo hiệu suất team Media từ export Base.vn</p>
+    </div>
+  </div>
+  <nav class="steps" id="steps">
+    <button class="step" data-step="1"><b>1</b> Nguồn dữ liệu</button>
+    <button class="step" data-step="2"><b>2</b> Thông số</button>
+    <button class="step" data-step="3"><b>3</b> Cân đối</button>
+    <button class="step" data-step="4"><b>4</b> Xuất file</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============================= BƯỚC 1 ============================= -->
+<section class="panel" data-panel="1">
+  <div class="card">
+    <h2>Chọn thư mục tháng</h2>
+    <p class="hint">Trỏ vào thư mục chứa các file export Base.vn và file báo cáo tháng trước,
+       ví dụ <code>E:\Báo cáo hiệu suất\2026\1026</code>. App tự nhận diện file.</p>
+    <div class="row">
+      <input type="text" id="folder" placeholder="Dán đường dẫn thư mục..." spellcheck="false">
+      <button class="btn" id="btnScan">Quét thư mục</button>
+      <button class="btn ghost" id="btnBrowse">Duyệt…</button>
+    </div>
+    <div class="uploadzone" id="drop">
+      <b>Hoặc kéo thả file vào đây</b>
+      <span>nhiều file export .xls + 1 file báo cáo mẫu .xlsx — app sẽ lưu vào thư mục workspace</span>
+      <input type="file" id="fileInput" multiple accept=".xls,.xlsx" hidden>
+      <button class="btn ghost small" id="btnPick">Chọn file…</button>
+    </div>
+    <div id="browser" class="browser hidden"></div>
+  </div>
+
+  <div class="card" id="cardFiles" style="display:none">
+    <h2>File dữ liệu nhận diện được</h2>
+    <table class="tbl" id="tblExports"></table>
+    <p class="hint">Bỏ tick dòng nào thì file đó không được đọc. Cột <b>Loại order</b> quyết định
+       bộ quy tắc phân loại — sửa nếu app đoán sai.</p>
+
+    <h2 style="margin-top:22px">Báo cáo tháng trước (file mẫu + nguồn dedup)</h2>
+    <p class="hint">App copy file này làm khuôn, đồng thời lấy toàn bộ ID trong đó để loại trùng.</p>
+    <table class="tbl" id="tblReports"></table>
+    <div id="tplInfo" class="callout hidden"></div>
+  </div>
+</section>
+
+<!-- ============================= BƯỚC 2 ============================= -->
+<section class="panel" data-panel="2">
+  <div class="card">
+    <h2>Kỳ báo cáo</h2>
+    <div class="grid3">
+      <label>Tháng<select id="month"></select></label>
+      <label>Năm<input type="number" id="year" min="2024" max="2030"></label>
+      <label>Lấy thêm task tạo từ
+        <select id="lookback">
+          <option value="1" selected>1 tháng trước (mặc định)</option>
+          <option value="0">Không lấy — chỉ task tạo trong tháng</option>
+          <option value="2">2 tháng trước</option>
+        </select>
+      </label>
+    </div>
+    <div class="callout info" id="calNote"></div>
+    <label class="check"><input type="checkbox" id="useCutoff" checked>
+      Tự loại task tháng trước đã hoàn thành <i>trước</i> lúc chốt báo cáo cũ
+      <span class="hint-inline">(những task này nhiều khả năng đã bị loại tay ở kỳ trước — vẫn xem lại được ở bước 3)</span>
+    </label>
+  </div>
+
+  <div class="card">
+    <h2>Nhân sự &amp; công chuẩn</h2>
+    <p class="hint">Công chuẩn / ngày nghỉ / OT ảnh hưởng trực tiếp tới lương nên app
+       không tự đoán — số gợi ý lấy từ lịch, bạn chốt lại.</p>
+    <table class="tbl" id="tblPersons"></table>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="btnAnalyse">Phân tích dữ liệu →</button>
+  </div>
+</section>
+
+<!-- ============================= BƯỚC 3 ============================= -->
+<section class="panel" data-panel="3">
+  <div class="scorebar" id="scorebar"></div>
+
+  <div class="card" id="cardFunnel">
+    <h2>Dữ liệu đã lọc thế nào</h2>
+    <div id="funnel" class="funnel"></div>
+  </div>
+
+  <div class="card" id="cardCarry" style="display:none">
+    <h2>Task từ tháng trước — cần bạn quyết</h2>
+    <p class="hint">Task tạo ở tháng lookback, chưa có trong báo cáo cũ.</p>
+    <table class="tbl" id="tblCarry"></table>
+  </div>
+
+  <div class="card">
+    <div class="tabs" id="personTabs"></div>
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Lọc theo tên task...">
+      <span class="sep"></span>
+      <button class="btn ghost small" data-bulk="dinhmuc">Đặt N = định mức</button>
+      <button class="btn ghost small" data-bulk="T">Đặt N = giờ phân bổ</button>
+      <button class="btn ghost small" data-bulk="reset">Khôi phục đề xuất</button>
+      <button class="btn ghost small" data-bulk="exclude">Bỏ khỏi báo cáo</button>
+      <button class="btn ghost small" data-bulk="include">Đưa lại vào</button>
+      <span class="hint-inline" id="selCount">chưa chọn dòng nào</span>
+    </div>
+    <div class="tblwrap">
+      <table class="tbl data" id="tblTasks"></table>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="btnBackTo2">← Quay lại thông số</button>
+    <button class="btn primary" id="btnToExport">Sang bước xuất file →</button>
+  </div>
+</section>
+
+<!-- ============================= BƯỚC 4 ============================= -->
+<section class="panel" data-panel="4">
+  <div class="card">
+    <h2>Xuất file báo cáo</h2>
+    <div class="row">
+      <input type="text" id="outPath" spellcheck="false" placeholder="Đường dẫn file .xlsx sẽ tạo">
+      <button class="btn primary" id="btnBuild">Dựng file</button>
+    </div>
+    <p class="hint">App copy file mẫu rồi ghi đè dữ liệu, sau đó nhờ Excel tính lại
+       array formula và tự chạy một loạt kiểm tra.</p>
+    <div id="buildLog"></div>
+  </div>
+
+  <div class="card" id="cardChecks" style="display:none">
+    <h2>Kết quả</h2>
+    <div id="resultBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>Phân tích theo BU</h2>
+    <div class="row tight">
+      <label class="check"><input type="radio" name="bumetric" value="T" checked> Theo giờ leader phân bổ</label>
+      <label class="check"><input type="radio" name="bumetric" value="N"> Theo giờ tính điểm (N)</label>
+    </div>
+    <div id="buBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>Base.vn API <span class="badge beta">beta — chưa kiểm chứng</span></h2>
+    <p class="hint">Tài liệu Workflow API của Base.vn nằm trên Postman nên chưa dò được shape tự động.
+      Dán access_token rồi bấm <b>Thử kết nối</b> — app gọi vài endpoint ứng viên và in nguyên
+      response ra đây để map field cho đúng. Lấy token ở
+      <code>account.base.vn → Tích hợp với bên thứ 3 ver 2</code> (chỉ tài khoản Owner tạo được).</p>
+    <div class="row">
+      <input type="password" id="baseToken" placeholder="access_token" spellcheck="false">
+      <input type="text" id="baseExtra" placeholder='Tham số thêm dạng JSON, vd {"page":0}' spellcheck="false">
+      <button class="btn" id="btnProbe">Thử kết nối</button>
+    </div>
+    <pre id="probeOut" class="probe hidden"></pre>
+  </div>
+</section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+<div id="overlay" class="overlay hidden"><div class="spinner"></div><p id="overlayMsg"></p></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js"></script>
+<script src="transport-pyodide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

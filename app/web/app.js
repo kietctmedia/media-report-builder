@@ -12,18 +12,15 @@ const S = {
   folder: '', exports: [], reports: [], template: '', templateInfo: null,
   persons: [], cfg: {}, tasks: [], edits: {}, active: '', sel: new Set(),
   stats: null, lastBuild: null, bu: null, buN: null,
-  cloud: false, excel: true,
+  cloud: false, static: false, excel: true,
 };
 
 /* ------------------------------------------------------------------ utils */
+/* Transport do transport-*.js nạp trước quyết định:
+   - bản chạy trên máy  -> gọi HTTP tới server Python
+   - bản tĩnh (Pages)   -> chạy thẳng Python trong trình duyệt bằng Pyodide    */
 async function api(path, body) {
-  const opt = body === undefined ? {} : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  };
-  const r = await fetch(path, opt);
-  const j = await r.json().catch(() => ({ ok: false, error: 'Phản hồi không hợp lệ' }));
-  return j;
+  return window.MRB.api(path, body === undefined ? {} : body);
 }
 function toast(msg, bad) {
   const t = $('#toast');
@@ -114,7 +111,7 @@ $('#btnBrowse').onclick = () => {
   if (!b.classList.contains('hidden')) browse($('#folder').value || '');
 };
 async function browse(path) {
-  const r = await (await fetch('/api/browse?path=' + encodeURIComponent(path))).json();
+  const r = await window.MRB.browse(path);
   const b = $('#browser');
   if (!r.ok) { b.innerHTML = `<div class="dir">${esc(r.error)}</div>`; return; }
   const found = (r.exports || []).length + (r.reports || []).length;
@@ -143,10 +140,8 @@ drop.addEventListener('drop', e => upload(e.dataTransfer.files));
 
 async function upload(files) {
   if (!files || !files.length) return;
-  const fd = new FormData();
-  [...files].forEach(f => fd.append('files', f, f.name));
-  busy(true, `Đang tải ${files.length} file…`);
-  const r = await (await fetch('/api/upload', { method: 'POST', body: fd })).json();
+  busy(true, `Đang nạp ${files.length} file…`);
+  const r = await window.MRB.upload([...files]);
   busy(false);
   if (!r.ok) return toast(r.error, true);
   S.folder = r.folder;
@@ -447,9 +442,10 @@ function renderResult(r) {
   (r.layout_warnings || []).forEach(w => {
     html += `<div class="callout warn">${esc(w)}</div>`;
   });
+  const href = S.static ? window.MRB.downloadUrl(r) : r.download;
   html += S.cloud
     ? `<div class="row" style="margin-top:16px">
-         <a class="btn primary" href="${r.download}" download>⤓ Tải file báo cáo</a></div>`
+         <a class="btn primary" href="${href}" download="${esc(r.out_path)}">⤓ Tải file báo cáo</a></div>`
     : `<div class="row" style="margin-top:16px">
          <button class="btn" id="btnOpenFile">Mở file</button>
          <button class="btn ghost" id="btnOpenDir">Mở thư mục chứa file</button></div>`;
@@ -511,24 +507,32 @@ function applyCloudMode() {
     + '(<code>.xlsx</code>, dùng làm khuôn và để loại trùng). File chỉ nằm trên máy chủ '
     + 'trong vài giờ rồi tự xoá.';
   $('#outPath').placeholder = 'Tên file .xlsx sẽ tải về';
+  if (S.static) {
+    $('.panel[data-panel="1"] .card .hint').innerHTML =
+      'Chọn các file export <code>.xls</code> của Base.vn và <b>file báo cáo tháng trước</b> '
+      + '(<code>.xlsx</code>, dùng làm khuôn và để loại trùng). '
+      + '<b>File không rời khỏi máy bạn</b> — toàn bộ xử lý chạy ngay trong trình duyệt.';
+  }
   const note = document.createElement('div');
   note.className = 'callout warn';
-  note.innerHTML = '<b>Bản online</b> — máy chủ không có Excel nên không tính sẵn được '
-    + 'array formula. File xuất ra vẫn đúng công thức, số sẽ hiện ngay khi bạn mở bằng Excel. '
-    + 'Muốn app tự tính và tự kiểm tra thì chạy bản trên máy (xem README).';
+  note.innerHTML = '<b>Bản online</b> — không có Excel để tính sẵn array formula. '
+    + 'File xuất ra vẫn đúng công thức, số hiện ngay khi bạn mở bằng Excel. '
+    + 'Muốn app tự tính và tự kiểm tra đầy đủ thì chạy bản trên máy (xem README).';
   $('.panel[data-panel="4"] .card').appendChild(note);
 }
 
 (async () => {
   goStep(1);
   const cfg = await api('/api/config', {});
+  busy(false);
   if (cfg.ok) {
     S.cloud = !!cfg.cloud;
+    S.static = !!cfg.static;
     S.excel = !!cfg.excel;
     if (S.cloud) applyCloudMode();
   }
   if (!S.cloud) {
-    const st = await (await fetch('/api/state')).json();
+    const st = await api('/api/state', {});
     if (st.ok && st.folder) $('#folder').value = st.folder;
   }
   refreshCalendar();

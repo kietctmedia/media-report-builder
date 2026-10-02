@@ -1,0 +1,26 @@
+{
+  "_comment": "Định mức giờ (Standard Hours). Quy tắc chốt từ T8/2026: N = min(T, định mức). Sửa số ở đây là toàn bộ app đổi theo.",
+
+  "anh_post_gio_moi_anh": 2,
+  "bo_anh_social_gio_moi_anh": 0.5,
+  "resize_gio_moi_anh": 0.1667,
+  "kv_gio": 4,
+  "landingpage_gio_moi_section": 0.6667,
+
+  "quay_lop_hoc_gio": 3,
+  "chup_lop_hoc_gio": 2,
+
+  "video_social_gio": 6,
+  "video_animation_gio": 6,
+  "video_sx_gio_moi_buoi": 3,
+
+  "_nguong_anh_post": {
+    "_comment": "Nếu leader cấp >= ngưỡng này (giờ/ảnh) thì coi là 'Ảnh post' (thiết kế đầy đủ), dưới ngưỡng là 'Bộ ảnh social' (bộ nhanh). Đây là ranh giới khó đoán nhất — xem lại ở bước Cân đối.",
+    "gio_moi_anh": 2
+  },
+
+  "_ap_dung_dinh_muc": {
+    "_comment": "false = N luôn = T (giờ leader phân bổ), bỏ qua trần định mức.",
+    "bat": true
+  }
+}
